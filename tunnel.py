@@ -1,16 +1,17 @@
 """
 Tunnel helpers for LocalShare.
 
-Supported providers (in priority order):
-  1. pyngrok  — pip install pyngrok  (wraps ngrok binary automatically)
-  2. cloudflared — free Cloudflare Quick Tunnel, no account required
-                   install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+Supported providers (in priority order — all free, no account required):
+  1. localhost.run  — SSH-based, zero install (SSH is built-in on Win10+/macOS/Linux)
+  2. cloudflared   — Cloudflare Quick Tunnel
+                     install: https://developers.cloudflare.com/cloudflare-one/connections/
+                              connect-networks/downloads/
 
 Usage
 -----
-    from tunnel import start_tunnel, stop_tunnel
+    from tunnel import start_tunnel
 
-    url, stop = start_tunnel(8080)   # url = "https://xxxx.ngrok-free.app" or trycloudflare.com
+    url, stop = start_tunnel(8080)   # e.g. https://abc123.lhr.life
     ...
     stop()
 """
@@ -27,26 +28,71 @@ class TunnelError(Exception):
     pass
 
 
-# ── ngrok via pyngrok ─────────────────────────────────────────────────────────
+# ── localhost.run (SSH, no install, no account) ───────────────────────────────
 
-def _try_pyngrok(port: int) -> tuple[str, Callable]:
-    """Start an ngrok tunnel using the pyngrok package."""
-    try:
-        from pyngrok import ngrok, conf  # type: ignore
-    except ImportError:
-        raise TunnelError("pyngrok not installed")
+_LHR_URL_RE = re.compile(r"https://[a-zA-Z0-9\-]+\.lhr\.life")
 
-    tunnel = ngrok.connect(port, "http")
-    url: str = tunnel.public_url
-    if url.startswith("http://"):
-        url = url.replace("http://", "https://", 1)
 
-    def stop():
+def _try_localhost_run(port: int) -> tuple[str, Callable]:
+    """
+    Tunnel via localhost.run using SSH.
+    SSH is built-in on Windows 10+, macOS, and all Linux distros.
+    No account or binary install required.
+    """
+    ssh = shutil.which("ssh")
+    if not ssh:
+        raise TunnelError("ssh binary not found — install OpenSSH and try again")
+
+    cmd = [
+        ssh,
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "ServerAliveInterval=30",
+        "-o", "ServerAliveCountMax=3",
+        # Use 127.0.0.1 explicitly — "localhost" may resolve to ::1 (IPv6)
+        # while the HTTP server only listens on 0.0.0.0 (IPv4).
+        "-R", f"80:127.0.0.1:{port}",
+        "nokey@localhost.run",
+    ]
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    url: str | None = None
+    deadline = time.monotonic() + 30
+
+    for line in proc.stdout:  # type: ignore[union-attr]
+        m = _LHR_URL_RE.search(line)
+        if m:
+            url = m.group(0)
+            break
+        if time.monotonic() > deadline:
+            proc.terminate()
+            raise TunnelError("localhost.run did not return a URL within 30 s")
+
+    if not url:
+        proc.terminate()
+        raise TunnelError("localhost.run closed the connection without a URL")
+
+    def _drain():
         try:
-            ngrok.disconnect(tunnel.public_url)
-            ngrok.kill()
+            for _ in proc.stdout:  # type: ignore[union-attr]
+                pass
         except Exception:
             pass
+
+    threading.Thread(target=_drain, daemon=True).start()
+
+    def stop():
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
 
     return url, stop
 
@@ -111,7 +157,7 @@ def _try_cloudflared(port: int) -> tuple[str, Callable]:
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 _PROVIDERS = [
-    ("ngrok (pyngrok)", _try_pyngrok),
+    ("localhost.run", _try_localhost_run),
     ("cloudflared", _try_cloudflared),
 ]
 
@@ -119,13 +165,8 @@ _PROVIDERS = [
 def available_providers() -> list[str]:
     """Return names of providers that appear to be usable on this machine."""
     names = []
-    # pyngrok
-    try:
-        import pyngrok  # noqa: F401  type: ignore
-        names.append("ngrok (pyngrok)")
-    except ImportError:
-        pass
-    # cloudflared
+    if shutil.which("ssh"):
+        names.append("localhost.run")
     if shutil.which("cloudflared"):
         names.append("cloudflared")
     return names
@@ -140,7 +181,7 @@ def start_tunnel(port: int, provider: str | None = None) -> tuple[str, Callable]
     port:
         Local port the HTTP server is listening on.
     provider:
-        ``"ngrok (pyngrok)"`` or ``"cloudflared"``.
+        ``"localhost.run"`` or ``"cloudflared"``.
         If *None*, the first available provider is used automatically.
 
     Raises

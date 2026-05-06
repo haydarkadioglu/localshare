@@ -8,13 +8,14 @@ from typing import Callable
 from server import create_server
 from tunnel import TunnelError, available_providers, start_tunnel
 from utils import get_local_ip
+from qr_popup import show_qr_popup
 
 
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("LocalShare")
-        self.root.geometry("500x470")
+        self.root.geometry("500x520")
         self.root.resizable(False, False)
         self.root.configure(bg="#111")
 
@@ -102,33 +103,70 @@ class App:
         )
         self._btn.pack(fill="x", pady=(0, 14))
 
-        # URL display
-        url_box = tk.Frame(body, bg="#1a1a2e", padx=14, pady=12)
-        url_box.pack(fill="x")
+        # ── Combined URL / tunnel card ─────────────────────────────────
+        card = tk.Frame(body, bg="#1a1a2e", padx=14, pady=12)
+        card.pack(fill="x", pady=(0, 10))
 
+        # LAN row
+        lan_row = tk.Frame(card, bg="#1a1a2e")
+        lan_row.pack(fill="x")
+        tk.Label(
+            lan_row, text="LAN",
+            font=("Segoe UI", 7, "bold"), bg="#1a1a2e", fg="#555",
+            width=5, anchor="w",
+        ).pack(side="left")
         self._lbl_url = tk.Label(
-            url_box,
-            text="—  server not running  —",
-            font=("Consolas", 10),
-            bg="#1a1a2e", fg="#444",
-            cursor="hand2",
+            lan_row, text="—  server not running  —",
+            font=("Consolas", 10), bg="#1a1a2e", fg="#444",
+            cursor="hand2", anchor="w",
         )
-        self._lbl_url.pack()
-
+        self._lbl_url.pack(side="left", fill="x", expand=True)
         self._lbl_hint = tk.Label(
-            url_box, text="",
-            font=("Segoe UI", 8),
-            bg="#1a1a2e", fg="#555",
+            card, text="",
+            font=("Segoe UI", 7), bg="#1a1a2e", fg="#555",
         )
-        self._lbl_hint.pack()
+        self._lbl_hint.pack(anchor="w", padx=(44, 0))
         self._lbl_url.bind("<Button-1>", self._copy_url)
 
-        # Tunnel section
-        tun_box = tk.Frame(body, bg="#111")
-        tun_box.pack(fill="x", pady=(10, 0))
+        # separator
+        tk.Frame(card, bg="#222", height=1).pack(fill="x", pady=(8, 8))
 
+        # Public link row
+        pub_row = tk.Frame(card, bg="#1a1a2e")
+        pub_row.pack(fill="x")
+        tk.Label(
+            pub_row, text="WEB",
+            font=("Segoe UI", 7, "bold"), bg="#1a1a2e", fg="#555",
+            width=5, anchor="w",
+        ).pack(side="left")
+        self._lbl_tun_url = tk.Label(
+            pub_row, text="—  no public link  —",
+            font=("Consolas", 10), bg="#1a1a2e", fg="#444",
+            cursor="hand2", anchor="w",
+        )
+        self._lbl_tun_url.pack(side="left", fill="x", expand=True)
+
+        # QR button (right side of the WEB row)
+        self._btn_qr = tk.Button(
+            pub_row, text="QR",
+            command=self._show_qr,
+            bg="#1a1a2e", fg="#555",
+            font=("Segoe UI", 7, "bold"),
+            relief="flat", padx=5, pady=2,
+            cursor="hand2", activebackground="#263238", bd=0,
+            state="disabled",
+        )
+        self._btn_qr.pack(side="right", padx=(4, 0))
+        self._lbl_tun_hint = tk.Label(
+            card, text="",
+            font=("Segoe UI", 7), bg="#1a1a2e", fg="#555",
+        )
+        self._lbl_tun_hint.pack(anchor="w", padx=(44, 0))
+        self._lbl_tun_url.bind("<Button-1>", self._copy_tunnel_url)
+
+        # Tunnel button
         self._btn_tunnel = tk.Button(
-            tun_box, text="🌐  Get Public Link",
+            body, text="🌐  Get Public Link",
             command=self._toggle_tunnel,
             bg="#37474f", fg="#aaa",
             font=("Segoe UI", 9, "bold"),
@@ -137,23 +175,6 @@ class App:
             state="disabled",
         )
         self._btn_tunnel.pack(fill="x")
-
-        tun_url_box = tk.Frame(body, bg="#1a1a2e", padx=14, pady=10)
-        tun_url_box.pack(fill="x", pady=(6, 0))
-
-        self._lbl_tun_url = tk.Label(
-            tun_url_box, text="—  no public link  —",
-            font=("Consolas", 10), bg="#1a1a2e", fg="#444",
-            cursor="hand2",
-        )
-        self._lbl_tun_url.pack()
-
-        self._lbl_tun_hint = tk.Label(
-            tun_url_box, text="",
-            font=("Segoe UI", 8), bg="#1a1a2e", fg="#555",
-        )
-        self._lbl_tun_hint.pack()
-        self._lbl_tun_url.bind("<Button-1>", self._copy_tunnel_url)
 
         # Status bar
         sb = tk.Frame(self.root, bg="#1a1a2e", padx=20, pady=5)
@@ -246,10 +267,13 @@ class App:
             messagebox.showerror(
                 "No Tunnel Provider",
                 "No tunnel provider found.\n\n"
-                "Install one of the following and try again:\n"
-                "  • ngrok: pip install pyngrok\n"
-                "  • cloudflared: https://developers.cloudflare.com/"
-                "cloudflare-one/connections/connect-networks/downloads/",
+                "localhost.run requires SSH — install OpenSSH:\n"
+                "  • Windows: Settings → Optional Features → OpenSSH Client\n\n"
+                "Or install cloudflared (no account needed):\n"
+                "  • winget install Cloudflare.cloudflared\n"
+                "  • brew install cloudflared  (macOS)\n"
+                "  • https://developers.cloudflare.com/cloudflare-one/"
+                "connections/connect-networks/downloads/",
             )
             return
 
@@ -276,6 +300,9 @@ class App:
             text="🔴  Stop Public Link", state="normal",
             bg="#b71c1c", fg="white", activebackground="#c62828",
         )
+        self._btn_qr.config(state="normal", fg="#4fc3f7")
+        # Auto-show QR popup
+        self.root.after(200, lambda: show_qr_popup(self.root, url))
 
     def _on_tunnel_error(self, msg: str):
         self._btn_tunnel.config(
@@ -291,11 +318,16 @@ class App:
         self._tunnel_url = None
         self._lbl_tun_url.config(text="—  no public link  —", fg="#444")
         self._lbl_tun_hint.config(text="")
+        self._btn_qr.config(state="disabled", fg="#555")
         if self._server:  # server still running, re-enable button
             self._btn_tunnel.config(
                 text="🌐  Get Public Link", state="normal",
                 bg="#1565c0", fg="white", activebackground="#1976d2",
             )
+
+    def _show_qr(self):
+        if self._tunnel_url:
+            show_qr_popup(self.root, self._tunnel_url)
 
     def _copy_tunnel_url(self, _event=None):
         if self._tunnel_url:
