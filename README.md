@@ -45,6 +45,18 @@ git clone https://github.com/haydarkadioglu/localshare.git
 cd localshare
 ```
 
+### Install Dependencies
+
+```powershell
+# Windows
+pip install -r requirements.txt
+```
+
+```bash
+# macOS / Linux
+pip3 install -r requirements.txt
+```
+
 ### Windows
 
 ```powershell
@@ -62,10 +74,11 @@ python3 main.py
 > On Apple Silicon (M1/M2/M3), the system Python may lack tkinter.  
 > Install via Homebrew: `brew install python-tk`
 
-### Linux (Debian / Ubuntu)
+### Linux (Debian / Ubuntu / Kali)
 
 ```bash
 sudo apt install python3-tk   # install tkinter if missing
+pip3 install -r requirements.txt
 python3 main.py
 ```
 
@@ -73,6 +86,7 @@ python3 main.py
 
 ```bash
 sudo dnf install python3-tkinter
+pip3 install -r requirements.txt
 python3 main.py
 ```
 

@@ -1,0 +1,4 @@
+# LocalShare runtime dependencies
+# Install with: pip install -r requirements.txt
+
+qrcode>=7.4          # QR code generation (no Pillow required)
