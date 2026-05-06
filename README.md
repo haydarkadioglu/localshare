@@ -107,6 +107,39 @@ The output is placed in the `dist/` folder.
 
 ---
 
+## Public Link via Tunneling
+
+LocalShare can expose your server to the internet using a tunnel provider.  
+Click **🌐 Get Public Link** in the app after starting the server.
+
+### Option 1 — ngrok (recommended, works everywhere)
+
+```bash
+pip install pyngrok
+```
+
+On first use, ngrok will ask for an auth token. Sign up free at [ngrok.com](https://ngrok.com), then:
+
+```bash
+ngrok config add-authtoken YOUR_TOKEN
+```
+
+### Option 2 — cloudflared (no account required)
+
+Download the binary for your platform from [developers.cloudflare.com](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) and place it in your PATH.
+
+| Platform | Install |
+|----------|---------|
+| Windows  | `winget install Cloudflare.cloudflared` |
+| macOS    | `brew install cloudflared` |
+| Linux    | Download `.deb` / `.rpm` / binary from the link above |
+
+Once either provider is installed, the app auto-detects it — no extra configuration needed.
+
+> **Note:** Public links are temporary (valid only while the app is running) and accessible to anyone who has the URL. Stop the tunnel when you're done.
+
+---
+
 ## Security Notes
 
 - The server listens on `0.0.0.0` — all devices on your network can access the shared folder.
